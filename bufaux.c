@@ -17,7 +17,7 @@
 
 /* Emulation wrappers for legacy OpenSSH buffer API atop sshbuf */
 
-#include "includes.h"
+#include "qvd_includes.h"
 
 #include <sys/types.h>
 

@@ -16,14 +16,17 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "includes.h"
+#include "qvd_includes.h"
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#ifndef __WIN32__
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+
 #include <netdb.h>
+#endif
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>

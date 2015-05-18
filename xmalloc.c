@@ -13,7 +13,7 @@
  * called by a name other than "ssh" or "Secure Shell".
  */
 
-#include "includes.h"
+#include "qvd_includes.h"
 
 #include <stdarg.h>
 #ifdef HAVE_STDINT_H

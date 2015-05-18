@@ -15,10 +15,14 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "includes.h"
+#include "qvd_includes.h"
 
 #include <sys/types.h>
+#ifndef __WIN32__
 #include <pwd.h>
+#else
+#include "openbsd-compat/qvd_pw.h"
+#endif
 #include <stdarg.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -26,6 +30,7 @@
 #include "log.h"
 #include "sftp.h"
 #include "misc.h"
+
 
 void
 cleanup_exit(int i)

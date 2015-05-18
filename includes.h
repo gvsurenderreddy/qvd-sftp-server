@@ -86,7 +86,7 @@
 #ifdef HAVE_STDINT_H
 # include <stdint.h>
 #endif
-#include <termios.h>
+//#include <termios.h>
 #ifdef HAVE_SYS_BITYPES_H
 # include <sys/bitypes.h> /* For u_intXX_t */
 #endif
@@ -112,8 +112,8 @@
 #include <sys/ptms.h>	/* for grantpt() and friends */
 #endif
 
-#include <netinet/in.h>
-#include <netinet/in_systm.h> /* For typedefs */
+//#include <netinet/in.h>
+//#include <netinet/in_systm.h> /* For typedefs */
 #ifdef HAVE_RPC_TYPES_H
 # include <rpc/types.h> /* For INADDR_LOOPBACK */
 #endif
@@ -173,9 +173,9 @@
 
 #include "defines.h"
 
-#include "platform.h"
-#include "openbsd-compat/openbsd-compat.h"
-#include "openbsd-compat/bsd-nextstep.h"
+//#include "platform.h"
+//#include "openbsd-compat/openbsd-compat.h"
+//#include "openbsd-compat/bsd-nextstep.h"
 
 #include "entropy.h"
 

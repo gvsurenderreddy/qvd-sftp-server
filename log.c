@@ -34,7 +34,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
+#include "includes-joni.h"
 
 #include <sys/types.h>
 
@@ -43,12 +43,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <syslog.h>
+/* #include <syslog.h> */
 #include <unistd.h>
 #include <errno.h>
 #if defined(HAVE_STRNVIS) && defined(HAVE_VIS_H) && !defined(BROKEN_STRNVIS)
 # include <vis.h>
 #endif
+#include <time.h>
+
 
 #include "xmalloc.h"
 #include "log.h"
@@ -94,6 +96,7 @@ static struct {
 	LogLevel val;
 } log_levels[] =
 {
+	{ "SILENT",	SYSLOG_LEVEL_QUIET }, 
 	{ "QUIET",	SYSLOG_LEVEL_QUIET },
 	{ "FATAL",	SYSLOG_LEVEL_FATAL },
 	{ "ERROR",	SYSLOG_LEVEL_ERROR },
@@ -232,6 +235,33 @@ debug3(const char *fmt,...)
 	va_start(args, fmt);
 	do_log(SYSLOG_LEVEL_DEBUG3, fmt, args);
 	va_end(args);
+}
+
+FILE *logfp;
+void openlog(const char *ident, int option, int facility) {
+    logfp = fopen("/log.txt", "a");
+}
+void syslog(int priority, const char *format, ...) {
+    char format_buffer[100] = {0};
+    char stime[20] = {0};
+    time_t t;
+    struct tm *tmp;
+    va_list argp;
+
+    t = time(NULL);
+    tmp = localtime(&t);
+    strftime(stime, sizeof(stime), "%Y-%m-%d %H:%M:%S", tmp);
+
+    snprintf(format_buffer, sizeof(format_buffer), 
+            "%s [%d] %d: %s\n", 
+            stime, getpid(), priority, format);
+
+    va_start(argp, format);
+    vfprintf(logfp, format_buffer, argp);
+    va_end(argp);
+}
+void closelog() {
+    fclose(logfp);
 }
 
 /*

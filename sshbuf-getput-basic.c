@@ -16,7 +16,7 @@
  */
 
 #define SSHBUF_INTERNAL
-#include "includes.h"
+#include "qvd_includes.h"
 
 #include <sys/types.h>
 #include <stdlib.h>

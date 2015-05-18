@@ -24,14 +24,16 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
+/* #include "includes.h" */
+#include "includes-joni.h"
 
 #include <sys/param.h>	/* MAX */
 #include <sys/types.h>
 #include <sys/stat.h>
-
+/*
 #include <grp.h>
 #include <pwd.h>
+*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,6 +50,10 @@
 
 #include "sftp.h"
 #include "sftp-common.h"
+
+#ifdef __WIN32__
+#include "openbsd-compat/qvd_pw.h"
+#endif
 
 /* Clear contents of attributes structure */
 void

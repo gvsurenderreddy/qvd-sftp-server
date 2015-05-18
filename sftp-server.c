@@ -15,7 +15,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "includes.h"
+#include "qvd_includes.h"
 
 #include <sys/param.h>	/* MIN */
 #include <sys/types.h>
@@ -33,14 +33,23 @@
 #include <sys/prctl.h>
 #endif
 
+#ifdef __WIN32__
+#include <winsock2.h>
+#include <winnt.h>
+#include <Shellapi.h>
+#endif
+
 #include <dirent.h>
 #include <errno.h>
+#ifndef __WIN32__
+#include <error.h>
+#endif
 #include <fcntl.h>
-#include <pwd.h>
+/*#include <pwd.h>*/
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <pwd.h>
+/*#include <pwd.h>*/
 #include <time.h>
 #include <unistd.h>
 #include <stdarg.h>
@@ -55,6 +64,10 @@
 
 #include "sftp.h"
 #include "sftp-common.h"
+
+#ifdef __WIN32__
+#include "openbsd-compat/bsd-misc.h"
+#endif
 
 /* Our verbosity */
 static LogLevel log_level = SYSLOG_LEVEL_ERROR;
@@ -113,6 +126,8 @@ static void process_extended_fstatvfs(u_int32_t id);
 static void process_extended_hardlink(u_int32_t id);
 static void process_extended_fsync(u_int32_t id);
 static void process_extended(u_int32_t id);
+LPTSTR find_tchar_argument(LPCTSTR option);
+
 
 struct sftp_handler {
 	const char *name;	/* user-visible name for fine-grained perms */
@@ -149,9 +164,11 @@ struct sftp_handler handlers[] = {
 struct sftp_handler extended_handlers[] = {
 	{ "posix-rename", "posix-rename@openssh.com", 0,
 	   process_extended_posix_rename, 1 },
+#ifndef __WIN32__
 	{ "statvfs", "statvfs@openssh.com", 0, process_extended_statvfs, 0 },
 	{ "fstatvfs", "fstatvfs@openssh.com", 0, process_extended_fstatvfs, 0 },
 	{ "hardlink", "hardlink@openssh.com", 0, process_extended_hardlink, 1 },
+#endif
 	{ "fsync", "fsync@openssh.com", 0, process_extended_fsync, 1 },
 	{ NULL, NULL, 0, NULL, 0 }
 };
@@ -165,6 +182,7 @@ request_permitted(struct sftp_handler *h)
 		verbose("Refusing %s request in read-only mode", h->name);
 		return 0;
 	}
+#ifndef __WIN32__
 	if (request_blacklist != NULL &&
 	    ((result = match_list(h->name, request_blacklist, NULL))) != NULL) {
 		free(result);
@@ -177,6 +195,7 @@ request_permitted(struct sftp_handler *h)
 		debug2("Permitting whitelisted %s request", h->name);
 		return 1;
 	}
+#endif
 	if (request_whitelist != NULL) {
 		verbose("Refusing non-whitelisted %s request", h->name);
 		return 0;
@@ -196,12 +215,19 @@ errno_to_portable(int unixerrno)
 	case ENOENT:
 	case ENOTDIR:
 	case EBADF:
+#ifndef __WIN32__
 	case ELOOP:
+#endif
 		ret = SSH2_FX_NO_SUCH_FILE;
 		break;
 	case EPERM:
 	case EACCES:
 	case EFAULT:
+#ifdef __WIN32__
+        case ERROR_ACCESS_DENIED:
+        case ERROR_SHARING_VIOLATION:
+        case ERROR_ALREADY_EXISTS:
+#endif
 		ret = SSH2_FX_PERMISSION_DENIED;
 		break;
 	case ENAMETOOLONG:
@@ -482,6 +508,29 @@ get_handle(struct sshbuf *queue, int *hp)
 	return 0;
 }
 
+
+static void
+_log_to_file(LogLevel level, const char *msg, void *logFile)
+{
+    FILE *logfp = fopen(logFile, "a");
+    if (logfp) {
+        char stime[20] = {0};
+        time_t t;
+        struct tm *tmp;
+
+        t = time(NULL);
+        tmp = localtime(&t);
+        strftime(stime, sizeof(stime), "%Y-%m-%d %H:%M:%S", tmp);
+
+        fprintf(logfp, "%s [%d] %s: %s\n", stime, getpid(), log_level_name(level), msg);
+
+        fclose(logfp);
+    } else {
+        perror(logFile);
+    }
+    return;
+}
+
 /* send replies */
 
 static void
@@ -660,6 +709,7 @@ process_init(void)
 	    /* POSIX rename extension */
 	    (r = sshbuf_put_cstring(msg, "posix-rename@openssh.com")) != 0 ||
 	    (r = sshbuf_put_cstring(msg, "1")) != 0 || /* version */
+#ifndef __WIN32__
 	    /* statvfs extension */
 	    (r = sshbuf_put_cstring(msg, "statvfs@openssh.com")) != 0 ||
 	    (r = sshbuf_put_cstring(msg, "2")) != 0 || /* version */
@@ -669,6 +719,7 @@ process_init(void)
 	    /* hardlink extension */
 	    (r = sshbuf_put_cstring(msg, "hardlink@openssh.com")) != 0 ||
 	    (r = sshbuf_put_cstring(msg, "1")) != 0 || /* version */
+#endif
 	    /* fsync extension */
 	    (r = sshbuf_put_cstring(msg, "fsync@openssh.com")) != 0 ||
 	    (r = sshbuf_put_cstring(msg, "1")) != 0) /* version */
@@ -702,6 +753,69 @@ process_open(u_int32_t id)
 		status = SSH2_FX_PERMISSION_DENIED;
 	} else {
 		fd = open(name, flags, mode);
+#ifdef __WIN32__
+		DWORD dwCreationDisposition = 0;
+		DWORD dwFlagsAndAttributes = FILE_ATTRIBUTE_NORMAL;
+		DWORD dwDesiredAccess = 0;
+
+		switch (flags & (_O_RDONLY | _O_WRONLY | _O_RDWR)) {
+			case _O_RDONLY: dwDesiredAccess = GENERIC_READ;
+							break;
+			case _O_WRONLY: dwDesiredAccess = GENERIC_WRITE;
+							break;
+			case _O_RDWR:   dwDesiredAccess = GENERIC_READ | GENERIC_WRITE;
+							break;
+		}
+
+		/*
+		 * decode flags
+		 */
+		switch (flags & (_O_CREAT | _O_EXCL | _O_TRUNC)) {
+			case 0:
+			case _O_EXCL:
+				dwCreationDisposition = OPEN_EXISTING;
+				break;
+
+			case _O_CREAT:
+				dwCreationDisposition = OPEN_ALWAYS;
+				break;
+
+			case _O_CREAT | _O_EXCL:
+			case _O_CREAT | _O_EXCL | _O_TRUNC:
+				dwCreationDisposition = CREATE_NEW;
+				break;
+
+			case _O_TRUNC:
+			case _O_TRUNC | _O_EXCL:
+			case _O_TRUNC | _O_CREAT:
+				dwCreationDisposition = CREATE_ALWAYS;
+				break;
+		}
+
+		if (flags & _O_APPEND) dwDesiredAccess |= FILE_APPEND_DATA;
+
+		if (flags & _O_TEMPORARY)
+			dwFlagsAndAttributes |= FILE_FLAG_DELETE_ON_CLOSE;
+
+		HANDLE hFile = CreateFile((LPCTSTR)name, 
+				dwDesiredAccess, 
+				FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, 
+				NULL, /* security attributes */
+				dwCreationDisposition,
+				dwFlagsAndAttributes, 
+				NULL /* template file */
+		); 
+
+		if (hFile == INVALID_HANDLE_VALUE) {
+			//_set_errno(GetLastError()); /* CreateFile doesn't set errno */
+			errno = GetLastError();
+			fd = -1;
+		} else {
+			fd = _open_osfhandle((intptr_t) hFile, flags | _O_BINARY);
+		}
+#else
+		fd = open(name, flags, mode);
+#endif		
 		if (fd < 0) {
 			status = errno_to_portable(errno);
 		} else {
@@ -926,16 +1040,20 @@ process_setstat(u_int32_t id)
 		strftime(buf, sizeof(buf), "%Y%m%d-%H:%M:%S",
 		    localtime(&t));
 		logit("set \"%s\" modtime %s", name, buf);
+#ifndef __WIN32__
 		r = utimes(name, attrib_to_tv(&a));
 		if (r == -1)
 			status = errno_to_portable(errno);
+#endif
 	}
 	if (a.flags & SSH2_FILEXFER_ATTR_UIDGID) {
 		logit("set \"%s\" owner %lu group %lu", name,
 		    (u_long)a.uid, (u_long)a.gid);
+#ifndef __WIN32__
 		r = chown(name, a.uid, a.gid);
 		if (r == -1)
 			status = errno_to_portable(errno);
+#endif
 	}
 	send_status(id, status);
 	free(name);
@@ -983,6 +1101,7 @@ process_fsetstat(u_int32_t id)
 			strftime(buf, sizeof(buf), "%Y%m%d-%H:%M:%S",
 			    localtime(&t));
 			logit("set \"%s\" modtime %s", name, buf);
+#ifndef __WIN32__
 #ifdef HAVE_FUTIMES
 			r = futimes(fd, attrib_to_tv(&a));
 #else
@@ -1001,6 +1120,7 @@ process_fsetstat(u_int32_t id)
 #endif
 			if (r == -1)
 				status = errno_to_portable(errno);
+#endif
 		}
 	}
 	send_status(id, status);
@@ -1124,7 +1244,11 @@ process_mkdir(u_int32_t id)
 	    a.perm & 07777 : 0777;
 	debug3("request %u: mkdir", id);
 	logit("mkdir name \"%s\" mode 0%o", name, mode);
+#ifdef __WIN32__
+	r = mkdir(name);
+#else
 	r = mkdir(name, mode);
+#endif
 	status = (r == -1) ? errno_to_portable(errno) : SSH2_FX_OK;
 	send_status(id, status);
 	free(name);
@@ -1193,7 +1317,7 @@ process_rename(u_int32_t id)
 	else if (S_ISREG(sb.st_mode)) {
 		/* Race-free rename of regular files */
 		if (link(oldpath, newpath) == -1) {
-			if (errno == EOPNOTSUPP || errno == ENOSYS
+			if (/*errno == EOPNOTSUPP ||*/ errno == ENOSYS
 #ifdef EXDEV
 			    || errno == EXDEV
 #endif
@@ -1298,6 +1422,7 @@ process_extended_posix_rename(u_int32_t id)
 	free(newpath);
 }
 
+#ifndef __WIN32__
 static void
 process_extended_statvfs(u_int32_t id)
 {
@@ -1355,12 +1480,14 @@ process_extended_hardlink(u_int32_t id)
 	free(oldpath);
 	free(newpath);
 }
+#endif
 
 static void
 process_extended_fsync(u_int32_t id)
 {
 	int handle, fd, r, status = SSH2_FX_OP_UNSUPPORTED;
 
+#ifndef __WIN32__
 	if ((r = get_handle(iqueue, &handle)) != 0)
 		fatal("%s: buffer error: %s", __func__, ssh_err(r));
 	debug3("request %u: fsync (handle %u)", id, handle);
@@ -1371,6 +1498,8 @@ process_extended_fsync(u_int32_t id)
 		r = fsync(fd);
 		status = (r == -1) ? errno_to_portable(errno) : SSH2_FX_OK;
 	}
+#endif
+
 	send_status(id, status);
 }
 
@@ -1513,6 +1642,15 @@ sftp_server_main(int argc, char **argv, struct passwd *user_pw)
 
 	extern char *optarg;
 	extern char *__progname;
+	
+	/* 
+	 * argv is non-unicode, so we can only accept ASCII filenames here
+	 * for now.
+	 * TODO: Allow Unicode filenames on Win32
+	 */
+    LPTSTR named_pipe = NULL;    /* named pipe for receiving socket on Windows */
+    LPTSTR temp_file = NULL;     /* temp file for receiving socket on Windows */
+    char*  log_file = NULL;      /* file for logging */
 
 	__progname = ssh_get_progname(argv[0]);
 	log_init(__progname, log_level, log_facility, log_stderr);
@@ -1520,8 +1658,22 @@ sftp_server_main(int argc, char **argv, struct passwd *user_pw)
 	pw = pwcopy(user_pw);
 
 	while (!skipargs && (ch = getopt(argc, argv,
-	    "d:f:l:P:p:Q:u:cehR")) != -1) {
+	    "L:F:I:d:f:l:P:p:Q:u:cehR")) != -1) {
 		switch (ch) {
+#ifdef __WIN32__
+		case 'L':
+				/* Name of log file */
+				log_file = optarg;
+				break;
+		case 'F':
+				/* Name of temp file from which to recover the socket */
+				temp_file = find_tchar_argument(TEXT("-F"));
+				break;
+		case 'I':
+				/* Name of pipe from which to recover the socket */
+				named_pipe = find_tchar_argument(TEXT("-I"));
+				break;
+#endif
 		case 'Q':
 			if (strcasecmp(optarg, "requests") != 0) {
 				fprintf(stderr, "Invalid query type\n");
@@ -1556,12 +1708,14 @@ sftp_server_main(int argc, char **argv, struct passwd *user_pw)
 			if (log_facility == SYSLOG_FACILITY_NOT_SET)
 				error("Invalid log facility \"%s\"", optarg);
 			break;
+#ifndef __WIN32__
 		case 'd':
 			cp = tilde_expand_filename(optarg, user_pw->pw_uid);
 			homedir = percent_expand(cp, "d", user_pw->pw_dir,
 			    "u", user_pw->pw_name, (char *)NULL);
 			free(cp);
 			break;
+#endif
 		case 'p':
 			if (request_whitelist != NULL)
 				fatal("Permitted requests already set");
@@ -1599,6 +1753,10 @@ sftp_server_main(int argc, char **argv, struct passwd *user_pw)
 		fatal("unable to make the process undumpable");
 #endif /* defined(HAVE_PRCTL) && defined(PR_SET_DUMPABLE) */
 
+        if (log_file) {
+            set_log_handler(_log_to_file, (void*)log_file);
+        }
+
 	if ((cp = getenv("SSH_CONNECTION")) != NULL) {
 		client_addr = xstrdup(cp);
 		if ((cp = strchr(client_addr, ' ')) == NULL) {
@@ -1613,8 +1771,77 @@ sftp_server_main(int argc, char **argv, struct passwd *user_pw)
 	logit("session opened for local user %s from [%s]",
 	    pw->pw_name, client_addr);
 
+#ifdef __WIN32__
+        if (named_pipe == NULL && temp_file == NULL) {
+            fatal("Must specify named pipe or temporary file!");
+        }
+
+        WSADATA WSAData;
+        WSAPROTOCOL_INFO ProtocolInfo;
+        DWORD BytesRead;
+        int err;
+
+        if (err = WSAStartup(0x0202, &WSAData)) {
+            fatal("WSAStartup: %p", err);
+        }
+        
+        if (WSAData.wVersion != 0x0202) {
+            fatal("WSAStartup: winsock version not 2.2");
+        }
+
+        if (getcwd(buf, sizeof(buf))) {
+            logit("Serving files from %s", buf);
+        }
+
+        /* Recover socket from named pipe or temporary file */
+        if (named_pipe) {
+            /* Named pipe seemed like a good idea but turned out to be flaky
+             * for reasons I don't fully understand: CallNamedPipe would often
+             * fail with ERROR_PIPE_BUSY and no amount of waiting and retrying
+             * would fix this.
+             */
+            logit("Recovering socket connection from named pipe %s", named_pipe);
+
+			/* ASCII version -- we need to implement Unicode command line parameters */
+            while (!CallNamedPipe(named_pipe, NULL, 0, 
+                            &ProtocolInfo, sizeof ProtocolInfo, 
+                            &BytesRead, 0))
+            {
+                int error = GetLastError();
+                if (error == ERROR_PIPE_BUSY) {
+                    logit("Pipe is busy, waiting...");
+                    WaitNamedPipe(named_pipe, 5000);
+                    /* TODO: control numer of retries */
+                } else {
+                    fatal("Unable to recover socket: CallNamedPipe: %p", error);
+                }
+            }
+        } else {
+            logit("Recovering socket connection from %s", temp_file);
+            FILE *fp = _tfopen(temp_file, TEXT("rb"));
+            if (fp) {
+                if (fread(&ProtocolInfo, sizeof ProtocolInfo, 1, fp) != 1) {
+                    fatal("Unable to recover socket: %s: %s", temp_file, strerror(errno));
+                }
+                fclose(fp);
+            } else {
+                fatal("Unable to recover socket: %s: %s", temp_file, strerror(errno));
+            }
+        }
+
+        SOCKET sock_client = WSASocket(AF_INET, SOCK_STREAM, 0, 
+                &ProtocolInfo, 0, WSA_FLAG_OVERLAPPED);
+        if (sock_client == INVALID_SOCKET) {
+            fatal("Unable to recover socket: WSASocket: %p", WSAGetLastError());
+        }
+        logit("Socket recovered.");
+
+        in = sock_client;
+        out = sock_client;
+#else 
 	in = STDIN_FILENO;
 	out = STDOUT_FILENO;
+#endif /* __WIN32__ */
 
 #ifdef HAVE_CYGWIN
 	setmode(in, O_BINARY);
@@ -1644,8 +1871,8 @@ sftp_server_main(int argc, char **argv, struct passwd *user_pw)
 	}
 
 	for (;;) {
-		memset(rset, 0, set_size);
-		memset(wset, 0, set_size);
+		FD_ZERO(rset);
+		FD_ZERO(wset);
 
 		/*
 		 * Ensure that we can read a full buffer and handle
@@ -1673,7 +1900,7 @@ sftp_server_main(int argc, char **argv, struct passwd *user_pw)
 
 		/* copy stdin to iqueue */
 		if (FD_ISSET(in, rset)) {
-			len = read(in, buf, sizeof buf);
+			len = recv(in, buf, sizeof buf, 0);
 			if (len == 0) {
 				debug("read eof");
 				sftp_server_cleanup_exit(0);
@@ -1687,7 +1914,7 @@ sftp_server_main(int argc, char **argv, struct passwd *user_pw)
 		}
 		/* send oqueue to stdout */
 		if (FD_ISSET(out, wset)) {
-			len = write(out, sshbuf_ptr(oqueue), olen);
+			len = send(out, sshbuf_ptr(oqueue), olen, 0);
 			if (len < 0) {
 				error("write: %s", strerror(errno));
 				sftp_server_cleanup_exit(1);
@@ -1710,3 +1937,34 @@ sftp_server_main(int argc, char **argv, struct passwd *user_pw)
 			    __func__, ssh_err(r));
 	}
 }
+
+#ifdef __WIN32__
+/*
+ * Find the argument to an option in the commandline. 
+ * This is a workaround for a char* implementation of getopt.
+ *
+ * TODO:
+ * 	Make a TCHAR impelemtnation of getopt and remove this function.
+ *
+ * 	CommandLineToArgvW doesn't have an ASCII version,
+ * 	and will need a reimplementation for this program to build
+ * 	without UNICODE.
+ */
+LPTSTR find_tchar_argument(LPCTSTR option) {
+	int argc,i;
+	LPTSTR cmdline = GetCommandLine();
+	LPTSTR *argv   = CommandLineToArgvW( cmdline, &argc );
+	LPTSTR ret     = NULL;	
+	LocalFree(cmdline);
+	
+	for(i=0;i<argc;i++) {
+		if (!_tcscmp(argv[i], option) && i <= argc-1) {
+			ret = _tcsdup(argv[i]+1);
+			break;
+		}
+	}
+	
+	LocalFree(argv);
+	return ret;
+}
+#endif

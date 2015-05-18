@@ -34,7 +34,7 @@
 
 /* OPENBSD ORIGINAL: include/vis.h */
 
-#include "includes.h"
+#include "../qvd_includes.h"
 #if !defined(HAVE_STRNVIS) || defined(BROKEN_STRNVIS)
 
 #ifndef _VIS_H_

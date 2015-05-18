@@ -16,7 +16,7 @@
  */
 
 #define SSHBUF_INTERNAL
-#include "includes.h"
+#include "qvd_includes.h"
 
 #include <sys/param.h>	/* roundup */
 #include <sys/types.h>

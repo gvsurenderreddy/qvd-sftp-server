@@ -24,12 +24,15 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
+#include "qvd_includes.h"
 
 #include <sys/types.h>
+#ifndef __WIN32__
 #include <sys/ioctl.h>
-#include <sys/socket.h>
 #include <sys/un.h>
+#endif
+#include <sys/socket.h>
+
 
 #include <limits.h>
 #include <stdarg.h>
@@ -39,15 +42,19 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifndef __WIN32__
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
+#endif
 
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#ifndef __WIN32__
 #include <netdb.h>
+#endif
 #ifdef HAVE_PATHS_H
 # include <paths.h>
 #include <pwd.h>
@@ -81,6 +88,7 @@ chop(char *s)
 int
 set_nonblock(int fd)
 {
+#ifndef __WIN32__
 	int val;
 
 	val = fcntl(fd, F_GETFL, 0);
@@ -99,12 +107,14 @@ set_nonblock(int fd)
 		    strerror(errno));
 		return (-1);
 	}
+#endif
 	return (0);
 }
 
 int
 unset_nonblock(int fd)
 {
+#ifndef __WIN32__
 	int val;
 
 	val = fcntl(fd, F_GETFL, 0);
@@ -123,9 +133,11 @@ unset_nonblock(int fd)
 		    fd, strerror(errno));
 		return (-1);
 	}
+#endif
 	return (0);
 }
 
+#ifndef __WIN32__
 const char *
 ssh_gai_strerror(int gaierr)
 {
@@ -133,11 +145,13 @@ ssh_gai_strerror(int gaierr)
 		return strerror(errno);
 	return gai_strerror(gaierr);
 }
+#endif
 
 /* disable nagle on socket */
 void
 set_nodelay(int fd)
 {
+#ifndef __WIN32__
 	int opt;
 	socklen_t optlen;
 
@@ -154,6 +168,7 @@ set_nodelay(int fd)
 	debug2("fd %d setting TCP_NODELAY", fd);
 	if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof opt) == -1)
 		error("setsockopt TCP_NODELAY: %.100s", strerror(errno));
+#endif
 }
 
 /* Characters considered whitespace in strsep calls. */
@@ -516,6 +531,7 @@ freeargs(arglist *args)
  * Expands tildes in the file name.  Returns data allocated by xmalloc.
  * Warning: this calls getpw*.
  */
+#ifndef __WIN32__
 char *
 tilde_expand_filename(const char *filename, uid_t uid)
 {
@@ -556,7 +572,7 @@ tilde_expand_filename(const char *filename, uid_t uid)
 
 	return (ret);
 }
-
+#endif
 /*
  * Expand a string with a set of %[char] escapes. A number of escapes may be
  * specified as (char *escape_chars, char *replacement) pairs. The list must
@@ -718,6 +734,7 @@ tun_open(int tun, int mode)
 void
 sanitise_stdfd(void)
 {
+#ifndef __WIN32__
 	int nullfd, dupfd;
 
 	if ((nullfd = dupfd = open(_PATH_DEVNULL, O_RDWR)) == -1) {
@@ -736,6 +753,8 @@ sanitise_stdfd(void)
 	}
 	if (nullfd > 2)
 		close(nullfd);
+	
+#endif
 }
 
 char *
@@ -1058,6 +1077,7 @@ lowercase(char *s)
 		*s = tolower((u_char)*s);
 }
 
+#ifndef __WIN32__
 int
 unix_listener(const char *path, int backlog, int unlink_first)
 {
@@ -1103,6 +1123,7 @@ unix_listener(const char *path, int backlog, int unlink_first)
 	}
 	return sock;
 }
+#endif
 
 void
 sock_set_v6only(int s)

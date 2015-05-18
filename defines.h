@@ -45,8 +45,8 @@ enum
 /*
  * Definitions for IP type of service (ip_tos)
  */
-#include <netinet/in_systm.h>
-#include <netinet/ip.h>
+//#include <netinet/in_systm.h>
+//#include <netinet/ip.h>
 #ifndef IPTOS_LOWDELAY
 # define IPTOS_LOWDELAY          0x10
 # define IPTOS_THROUGHPUT        0x08
@@ -106,7 +106,7 @@ enum
 #endif /* MAXPATHLEN */
 
 #ifndef HOST_NAME_MAX
-# include "netdb.h" /* for MAXHOSTNAMELEN */
+//# include "netdb.h" /* for MAXHOSTNAMELEN */
 # if defined(_POSIX_HOST_NAME_MAX)
 #  define HOST_NAME_MAX _POSIX_HOST_NAME_MAX
 # elif defined(MAXHOSTNAMELEN)
