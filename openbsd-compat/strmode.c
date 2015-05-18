@@ -30,7 +30,7 @@
 
 /* OPENBSD ORIGINAL: lib/libc/string/strmode.c */
 
-#include "includes.h"
+#include "../qvd_includes.h"
 #ifndef HAVE_STRMODE
 
 #include <sys/types.h>
@@ -56,9 +56,11 @@ strmode(int mode, char *p)
 	case S_IFREG:			/* regular */
 		*p++ = '-';
 		break;
+#ifdef S_IFLNK
 	case S_IFLNK:			/* symbolic link */
 		*p++ = 'l';
 		break;
+#endif
 #ifdef S_IFSOCK
 	case S_IFSOCK:			/* socket */
 		*p++ = 's';

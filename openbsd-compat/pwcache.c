@@ -30,12 +30,15 @@
 
 /* OPENBSD ORIGINAL: lib/libc/gen/pwcache.c */
 
-#include "includes.h"
+#include "../qvd_includes.h"
 
 #include <sys/types.h>
 
+#ifndef __WIN32__
 #include <grp.h>
 #include <pwd.h>
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

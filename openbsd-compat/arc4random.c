@@ -24,7 +24,7 @@
  * ChaCha based random number generator for OpenBSD.
  */
 
-#include "includes.h"
+#include "../includes-joni.h"
 
 #include <sys/types.h>
 

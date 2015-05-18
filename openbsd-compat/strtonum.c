@@ -19,7 +19,7 @@
 
 /* OPENBSD ORIGINAL: lib/libc/stdlib/strtonum.c */
 
-#include "includes.h"
+#include "../qvd_includes.h"
 
 #ifndef HAVE_STRTONUM
 #include <stdlib.h>

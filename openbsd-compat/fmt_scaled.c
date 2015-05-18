@@ -38,7 +38,7 @@
  * Scanning code written for OpenBSD libutil.
  */
 
-#include "includes.h"
+#include "../qvd_includes.h"
 
 #ifndef HAVE_FMT_SCALED
 

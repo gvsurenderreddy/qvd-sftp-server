@@ -17,7 +17,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "includes.h"
+#include "../qvd_includes.h"
 
 #ifndef HAVE_VASPRINTF
 

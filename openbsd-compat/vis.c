@@ -30,7 +30,7 @@
 
 /* OPENBSD ORIGINAL: lib/libc/gen/vis.c */
 
-#include "includes.h"
+#include "../qvd_includes.h"
 #if !defined(HAVE_STRNVIS) || defined(BROKEN_STRNVIS)
 
 #include <ctype.h>

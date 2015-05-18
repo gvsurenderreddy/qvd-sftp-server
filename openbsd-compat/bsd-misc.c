@@ -15,7 +15,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "includes.h"
+#include "../qvd_includes.h"
 
 #include <sys/types.h>
 #ifdef HAVE_SYS_SELECT_H
@@ -119,6 +119,7 @@ int utimes(char *filename, struct timeval *tvp)
 #ifndef HAVE_TRUNCATE
 int truncate(const char *path, off_t length)
 {
+#ifndef __WIN32__
 	int fd, ret, saverrno;
 
 	fd = open(path, O_WRONLY);
@@ -132,6 +133,9 @@ int truncate(const char *path, off_t length)
 		errno = saverrno;
 
 	return(ret);
+#else
+	/* QVD: TODO */
+#endif
 }
 #endif /* HAVE_TRUNCATE */
 
@@ -211,6 +215,7 @@ tcsendbreak(int fd, int duration)
 }
 #endif /* HAVE_TCSENDBREAK */
 
+#ifndef __WIN32__
 mysig_t
 mysignal(int sig, mysig_t act)
 {
@@ -237,6 +242,7 @@ mysignal(int sig, mysig_t act)
 	return (signal(sig, act));
 #endif
 }
+#endif
 
 #ifndef HAVE_STRDUP
 char *
