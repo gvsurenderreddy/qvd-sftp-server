@@ -1777,7 +1777,7 @@ sftp_server_main(int argc, char **argv, struct passwd *user_pw)
         }
 
         WSADATA WSAData;
-        WSAPROTOCOL_INFO ProtocolInfo;
+        WSAPROTOCOL_INFOA ProtocolInfo;
         DWORD BytesRead;
         int err;
 
@@ -1821,15 +1821,16 @@ sftp_server_main(int argc, char **argv, struct passwd *user_pw)
             FILE *fp = _tfopen(temp_file, TEXT("rb"));
             if (fp) {
                 if (fread(&ProtocolInfo, sizeof ProtocolInfo, 1, fp) != 1) {
-                    fatal("Unable to recover socket: %s: %s", temp_file, strerror(errno));
+                    fatal("Unable to recover socket: Failed to read %i bytes from %s: %s", 
+						sizeof ProtocolInfo, temp_file, strerror(errno));
                 }
                 fclose(fp);
             } else {
-                fatal("Unable to recover socket: %s: %s", temp_file, strerror(errno));
+                fatal("Unable to recover socket: Failed to open file %s: %s", temp_file, strerror(errno));
             }
         }
 
-        SOCKET sock_client = WSASocket(AF_INET, SOCK_STREAM, 0, 
+        SOCKET sock_client = WSASocketA(AF_INET, SOCK_STREAM, 0, 
                 &ProtocolInfo, 0, WSA_FLAG_OVERLAPPED);
         if (sock_client == INVALID_SOCKET) {
             fatal("Unable to recover socket: WSASocket: %p", WSAGetLastError());
