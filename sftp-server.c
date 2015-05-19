@@ -1960,7 +1960,7 @@ LPTSTR find_tchar_argument(LPCTSTR option) {
 	
 	for(i=0;i<argc;i++) {
 		if (!_tcscmp(argv[i], option) && i <= argc-1) {
-			ret = _tcsdup(argv[i]+1);
+			ret = _tcsdup(argv[i+1]);
 			break;
 		}
 	}
