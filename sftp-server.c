@@ -127,6 +127,7 @@ static void process_extended_hardlink(u_int32_t id);
 static void process_extended_fsync(u_int32_t id);
 static void process_extended(u_int32_t id);
 LPTSTR find_tchar_argument(LPCTSTR option);
+LPWSTR utf8_to_lpwstr(char *string);
 
 
 struct sftp_handler {
@@ -797,7 +798,9 @@ process_open(u_int32_t id)
 		if (flags & _O_TEMPORARY)
 			dwFlagsAndAttributes |= FILE_FLAG_DELETE_ON_CLOSE;
 
-		HANDLE hFile = CreateFile((LPCTSTR)name, 
+		LPWSTR lpwstrFilename = utf8_to_lpwstr(name);
+		
+		HANDLE hFile = CreateFile(lpwstrFilename, 
 				dwDesiredAccess, 
 				FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, 
 				NULL, /* security attributes */
@@ -805,6 +808,8 @@ process_open(u_int32_t id)
 				dwFlagsAndAttributes, 
 				NULL /* template file */
 		); 
+		
+		free(lpwstrFilename);
 
 		if (hFile == INVALID_HANDLE_VALUE) {
 			//_set_errno(GetLastError()); /* CreateFile doesn't set errno */
@@ -1968,4 +1973,32 @@ LPTSTR find_tchar_argument(LPCTSTR option) {
 	LocalFree(argv);
 	return ret;
 }
+
+LPWSTR utf8_to_lpwstr(char *string) {
+	if ( string == NULL )
+		return NULL;
+	
+	if ( string[0] == '\0' )
+		return L"";
+	
+	int utf8_size = MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, string, -1, NULL, 0);
+	
+	if ( utf8_size <= 0 ) {
+		fatal("Error getting allocation size for string conversion");
+		return NULL;
+	}
+	
+	int buflen = utf8_size + sizeof(WCHAR);
+	LPWSTR utf8_string = malloc(buflen);
+	
+	int ret = MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, string, -1, utf8_string, buflen);
+	
+	if ( ret <= 0 ) {
+		fatal("Error performing UTF8 to UTF16 conversion");
+		return NULL;
+	}
+	
+	return utf8_string;
+}
+
 #endif
