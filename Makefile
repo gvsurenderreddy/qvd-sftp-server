@@ -1,6 +1,6 @@
 #CC=i686-w64-mingw32-gcc
 CC=gcc
-CFLAGS=-g -Werror
+CFLAGS=-O0 -ggdb -Werror
 
 SOURCES=bufaux.c \
 	buffer.c \
@@ -25,6 +25,10 @@ SOURCES=bufaux.c \
 	sftp-server-main.c \
 	xmalloc.c
 
+.PHONY: deploy
+deploy: sftp-server.exe
+	cp -p -v sftp-server.exe /v
+	
 sftp-server.exe: $(SOURCES:.c=.o)
 	$(CC) --verbose  -o $@ $+ -lmsvcrt -lws2_32
 	#strip $@
