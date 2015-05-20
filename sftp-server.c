@@ -753,7 +753,6 @@ process_open(u_int32_t id)
 		verbose("Refusing open request in read-only mode");
 		status = SSH2_FX_PERMISSION_DENIED;
 	} else {
-		fd = open(name, flags, mode);
 #ifdef __WIN32__
 		DWORD dwCreationDisposition = 0;
 		DWORD dwFlagsAndAttributes = FILE_ATTRIBUTE_NORMAL;
