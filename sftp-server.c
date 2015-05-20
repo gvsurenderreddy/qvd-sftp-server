@@ -1778,6 +1778,30 @@ sftp_server_main(int argc, char **argv, struct passwd *user_pw)
 		logit("Argument %i: %s", i, argv[i]);
 	}
 
+	HMODULE hmBacktrace = LoadLibrary(TEXT("backtrace.dll"));
+	
+	if ( hmBacktrace != NULL ) {
+		logit("Loaded backtrace library");
+	} else {
+		char errmsg[256];
+		DWORD dwError = GetLastError();
+		DWORD ret = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM,
+			NULL,
+			dwError,
+			MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+			errmsg,
+			(sizeof(*errmsg)/sizeof(errmsg[0]))-1,
+			NULL);
+		
+		logit("Failed to load backtrace library, error %i: %s", dwError, errmsg);
+		
+		if ( ret == 0 ) {
+			logit("FormatMessage failed");
+		} else {
+			logit("%i tchars returned", ret);
+		}
+	}
+	
 	logit("session opened for local user %s from [%s]",
 	    pw->pw_name, client_addr);
 
