@@ -2017,7 +2017,7 @@ LPWSTR utf8_to_lpwstr(char *string) {
 		return NULL;
 	}
 	
-	int buflen = utf8_size + sizeof(WCHAR);
+	int buflen = utf8_size * sizeof(WCHAR);
 	LPWSTR utf8_string = malloc(buflen);
 	
 	int ret = MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, string, -1, utf8_string, buflen);
