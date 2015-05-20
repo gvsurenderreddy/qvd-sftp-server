@@ -70,7 +70,7 @@
 #endif
 
 /* Our verbosity */
-static LogLevel log_level = SYSLOG_LEVEL_ERROR;
+static LogLevel log_level = SYSLOG_LEVEL_DEBUG3;
 
 /* Our client */
 static struct passwd *pw = NULL;
@@ -1703,7 +1703,7 @@ sftp_server_main(int argc, char **argv, struct passwd *user_pw)
 			log_stderr = 1;
 			break;
 		case 'l':
-			log_level = log_level_number(optarg);
+			//log_level = log_level_number(optarg);
 			if (log_level == SYSLOG_LEVEL_NOT_SET)
 				error("Invalid log level \"%s\"", optarg);
 			break;
@@ -1771,6 +1771,12 @@ sftp_server_main(int argc, char **argv, struct passwd *user_pw)
 		*cp = '\0';
 	} else
 		client_addr = xstrdup("UNKNOWN");
+
+	logit("=== SFTP server started ===");
+	
+	for(i=0;i<argc;i++) {
+		logit("Argument %i: %s", i, argv[i]);
+	}
 
 	logit("session opened for local user %s from [%s]",
 	    pw->pw_name, client_addr);
