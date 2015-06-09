@@ -7,6 +7,11 @@
 
 /* For Unicode file names. */
 #define UNICODE
+
+/* Vista */
+#define WINVER       0x0602
+#define _WIN32_WINNT 0x0600 
+
 #include <tchar.h>
 #endif
 
@@ -120,6 +125,22 @@ struct passwd
 #define symlink(R,N) (EPERM) /* no symlinks on Windows */
 
 #define bzero(P,S) memset(P,S,0)
+
+/* Missing constant in FILE_INFO_BY_HANDLE_CLASS on MinGW */
+#define FIBHC_FILE_ID_INFO 0x12
+
+#include <windows.h>
+#ifndef FILE_ID_INFO
+typedef struct _EXT_FILE_ID_128 {
+  BYTE Identifier[16];
+} EXT_FILE_ID_128, *PEXT_FILE_ID_128, FILE_ID_128;
+
+typedef struct _FILE_ID_INFO {
+  ULONGLONG   VolumeSerialNumber;
+  FILE_ID_128 FileId;
+} FILE_ID_INFO, *PFILE_ID_INFO;
+#endif
+
 #endif
 
 /*

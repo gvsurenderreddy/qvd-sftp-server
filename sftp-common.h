@@ -49,4 +49,9 @@ int	 decode_attrib(struct sshbuf *, Attrib *);
 int	 encode_attrib(struct sshbuf *, const Attrib *);
 char	*ls_file(const char *, const struct stat *, int, int);
 
+#ifdef __WIN32__
+#include <Windows.h>
+char *win32_ls_file(const char *name, LPWIN32_FIND_DATA file, int remote, int si_units);
+#endif
+
 const char *fx2txt(int);

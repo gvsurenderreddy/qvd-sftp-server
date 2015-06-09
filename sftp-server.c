@@ -34,9 +34,14 @@
 #endif
 
 #ifdef __WIN32__
+#define UNICODE
+
 #include <winsock2.h>
 #include <winnt.h>
+#include <shlwapi.h>
+#include <windows.h>
 #include <Shellapi.h>
+
 #endif
 
 #include <dirent.h>
@@ -67,6 +72,10 @@
 
 #ifdef __WIN32__
 #include "openbsd-compat/bsd-misc.h"
+#include "winfunc.h"
+
+
+
 #endif
 
 /* Our verbosity */
@@ -127,7 +136,7 @@ static void process_extended_hardlink(u_int32_t id);
 static void process_extended_fsync(u_int32_t id);
 static void process_extended(u_int32_t id);
 LPTSTR find_tchar_argument(LPCTSTR option);
-LPWSTR utf8_to_lpwstr(char *string);
+
 
 
 struct sftp_handler {
@@ -300,10 +309,28 @@ string_from_portable(int pflags)
 
 /* handle handles */
 
+/* 
+ * Depending on architecture we use entirely different directory
+ * handles. Seems easiest to change the type so that handle_new and
+ * other functions that don't care about the particulars are easiest
+ * to port.
+ */
+ 
+#ifdef __WIN32__
+typedef DIR* SFTP_DIR;
+#define SFTP_DIR_INVALID_VALUE NULL
+#else
+typedef HANDLE SFTP_DIR;
+#define SFTP_DIR_INVALID_VALUE INVALID_HANDLE_VALUE
+#endif
+
 typedef struct Handle Handle;
 struct Handle {
 	int use;
-	DIR *dirp;
+	SFTP_DIR dirp;
+#ifdef __WIN32__
+	LPWIN32_FIND_DATA first_file;
+#endif	
 	int fd;
 	int flags;
 	char *name;
@@ -321,6 +348,25 @@ Handle *handles = NULL;
 u_int num_handles = 0;
 int first_unused_handle = -1;
 
+
+int sftp_closedir(SFTP_DIR dir) 
+{
+#ifndef __WIN32__
+	return closedir(dir);
+#else
+	int ret;
+	
+	if ( FindClose(dir) !=0 )
+	{
+		ret = 0; // All ok
+	} else {
+		ret = 1; // Error, TODO: Windows error code mapping
+	}
+	
+	return ret;	
+#endif
+}
+
 static void handle_unused(int i)
 {
 	handles[i].use = HANDLE_UNUSED;
@@ -329,7 +375,7 @@ static void handle_unused(int i)
 }
 
 static int
-handle_new(int use, const char *name, int fd, int flags, DIR *dirp)
+handle_new(int use, const char *name, int fd, int flags, SFTP_DIR dirp)
 {
 	int i;
 
@@ -350,7 +396,9 @@ handle_new(int use, const char *name, int fd, int flags, DIR *dirp)
 	handles[i].flags = flags;
 	handles[i].name = xstrdup(name);
 	handles[i].bytes_read = handles[i].bytes_write = 0;
-
+#ifdef __WIN32__
+    handles[i].first_file = NULL;
+#endif
 	return i;
 }
 
@@ -394,7 +442,7 @@ handle_to_name(int handle)
 	return NULL;
 }
 
-static DIR *
+static SFTP_DIR
 handle_to_dir(int handle)
 {
 	if (handle_is_ok(handle, HANDLE_DIR))
@@ -448,6 +496,23 @@ handle_bytes_write(int handle)
 	return 0;
 }
 
+#ifdef __WIN32__
+static LPWIN32_FIND_DATA 
+handle_first_file(int handle) {
+	if ( handle_is_ok(handle, HANDLE_DIR) )
+		return handles[handle].first_file;
+	return 0;
+}
+
+static void
+handle_set_first_file(int handle, LPWIN32_FIND_DATA file)
+{
+	if ( handle_is_ok(handle, HANDLE_DIR) )
+		handles[handle].first_file = file;
+}
+
+#endif
+
 static int
 handle_close(int handle)
 {
@@ -458,8 +523,13 @@ handle_close(int handle)
 		free(handles[handle].name);
 		handle_unused(handle);
 	} else if (handle_is_ok(handle, HANDLE_DIR)) {
-		ret = closedir(handles[handle].dirp);
+		ret = sftp_closedir(handles[handle].dirp);
 		free(handles[handle].name);
+		
+#ifdef __WIN32__
+		if ( handles[handle].first_file != NULL )
+			free(handles[handle].first_file);
+#endif
 		handle_unused(handle);
 	} else {
 		errno = ENOENT;
@@ -949,6 +1019,8 @@ process_do_stat(u_int32_t id, int do_lstat)
 
 	debug3("request %u: %sstat", id, do_lstat ? "l" : "");
 	verbose("%sstat name \"%s\"", do_lstat ? "l" : "", name);
+	
+#ifndef __WIN32__
 	r = do_lstat ? lstat(name, &st) : stat(name, &st);
 	if (r < 0) {
 		status = errno_to_portable(errno);
@@ -957,6 +1029,45 @@ process_do_stat(u_int32_t id, int do_lstat)
 		send_attrib(id, &a);
 		status = SSH2_FX_OK;
 	}
+#else
+	LPWSTR filename = utf8_to_lpwstr(name);
+	FILE_ID_INFO fileid_info;
+	BY_HANDLE_FILE_INFORMATION file_info;
+	BOOL fi_ret, fi_ex_ret;
+
+	HANDLE hFile = CreateFile(filename, 
+			GENERIC_READ, 
+			FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, 
+			NULL, /* security attributes */
+			OPEN_EXISTING,
+			FILE_ATTRIBUTE_NORMAL, 
+			NULL /* template file */
+	);  
+	
+	if ( hFile != INVALID_HANDLE_VALUE ) {
+		
+		if ( !(fi_ret = GetFileInformationByHandle(hFile, &file_info)) ) {
+			status = SSH2_FX_FAILURE;
+			windows_error(L"GetFileInformationByHandle");
+		}
+		
+		if ( !(fi_ex_ret = GetFileInformationByHandleEx(hFile, FIBHC_FILE_ID_INFO, &fileid_info, sizeof(fileid_info))) ) {
+			status = SSH2_FX_FAILURE;
+			windows_error(L"GetFileInformationByHandleEx");
+		}
+	
+		if ( fi_ret && fi_ex_ret ) {
+			
+		}
+
+		CloseHandle(hFile);
+	} else {
+		status = SSH2_FX_FAILURE;
+		windows_error(L"CreateFile");
+	}
+	
+	free(filename);
+#endif
 	if (status != SSH2_FX_OK)
 		send_status(id, status);
 	free(name);
@@ -1133,7 +1244,7 @@ process_fsetstat(u_int32_t id)
 static void
 process_opendir(u_int32_t id)
 {
-	DIR *dirp = NULL;
+	SFTP_DIR dirp = SFTP_DIR_INVALID_VALUE;
 	char *path;
 	int r, handle, status = SSH2_FX_FAILURE;
 
@@ -1141,15 +1252,72 @@ process_opendir(u_int32_t id)
 		fatal("%s: buffer error: %s", __func__, ssh_err(r));
 
 	debug3("request %u: opendir", id);
+	
 	logit("opendir \"%s\"", path);
+#ifndef __WIN32__
 	dirp = opendir(path);
-	if (dirp == NULL) {
+#else
+	LPWSTR prefix = L"\\\\?\\";
+	LPWSTR separator = L"\\";
+	LPWSTR pattern = L"\\*";
+	
+	LPWIN32_FIND_DATA data = xmalloc(sizeof(*data));
+	LPWSTR wdir = utf8_to_lpwstr(path);
+	LPWSTR find_path = NULL;
+
+	/* TODO: figure out why the _s functions don't link, or make a replacement */
+	if ( PathIsRelative(wdir) ) {
+		/* 
+		 * FindFirstFile doesn't like patterns like ".\*"
+		 */
+		LPWSTR curdir = NULL;
+		LPWSTR tmp = NULL;
+		
+		size_t curdir_len = GetCurrentDirectoryW(0, NULL);
+		size_t tmp_len = curdir_len + wcslen( wdir ) + wcslen(separator) + wcslen(prefix);
+		
+		curdir = (LPWSTR)xmalloc(curdir_len * sizeof(curdir[0]));
+		tmp    = (LPWSTR)xmalloc(tmp_len * sizeof(tmp[0]));
+		
+		GetCurrentDirectoryW(tmp_len, curdir);
+		
+		wcscpy(tmp, prefix);
+		wcscat(tmp, curdir);
+		wcscat(tmp, separator);
+		wcscat(tmp, wdir);
+		
+		find_path = (LPWSTR)xrealloc( find_path, tmp_len + wcslen(pattern), sizeof(find_path[0] ) );
+		PathCanonicalize(find_path, tmp);
+		
+		free(curdir);
+		free(tmp);
+	} else {
+		find_path = (LPWSTR)xmalloc( ( wcslen(wdir) + wcslen(prefix) + wcslen(pattern) ) * sizeof(find_path[0]) );
+		wcscpy(find_path, prefix);
+		wcscat(find_path, wdir);
+	}
+	
+	wcscat(find_path, pattern);
+	
+	char *p = lpwstr_to_utf8(find_path);
+	logit("Trying to FindFirstFile: '%s'", p);
+	free(p);
+	
+    dirp = FindFirstFile(find_path, data);
+	free(wdir);
+#endif
+
+	if (dirp == SFTP_DIR_INVALID_VALUE) {
+		windows_error(TEXT("FindFirstFile"));
 		status = errno_to_portable(errno);
 	} else {
 		handle = handle_new(HANDLE_DIR, path, 0, 0, dirp);
 		if (handle < 0) {
-			closedir(dirp);
+			sftp_closedir(dirp);
 		} else {
+			#ifdef __WIN32__
+			handle_set_first_file(handle, data);
+			#endif
 			send_handle(id, handle);
 			status = SSH2_FX_OK;
 		}
@@ -1163,7 +1331,7 @@ process_opendir(u_int32_t id)
 static void
 process_readdir(u_int32_t id)
 {
-	DIR *dirp;
+	SFTP_DIR dirp;
 	struct dirent *dp;
 	char *path;
 	int r, handle;
@@ -1175,7 +1343,7 @@ process_readdir(u_int32_t id)
 	    handle_to_name(handle), handle);
 	dirp = handle_to_dir(handle);
 	path = handle_to_name(handle);
-	if (dirp == NULL || path == NULL) {
+	if (dirp == SFTP_DIR_INVALID_VALUE || path == NULL) {
 		send_status(id, SSH2_FX_FAILURE);
 	} else {
 		struct stat st;
@@ -1184,6 +1352,7 @@ process_readdir(u_int32_t id)
 		int nstats = 10, count = 0, i;
 
 		stats = xcalloc(nstats, sizeof(Stat));
+		#ifndef __WIN32__
 		while ((dp = readdir(dirp)) != NULL) {
 			if (count >= nstats) {
 				nstats *= 2;
@@ -1203,9 +1372,52 @@ process_readdir(u_int32_t id)
 			if (count == 100)
 				break;
 		}
+		#else
+		/*
+		 * Unlike Unix, on Win32 we get the first directory entry on opendir.
+		 * The SFTP API follows the Unix way of doing things, so on Win32 we
+		 * save the first entry on opendir and use it here during the first
+		 * read
+		 */
+		LPWIN32_FIND_DATA first_file = handle_first_file(handle);
+		WIN32_FIND_DATA file;
+		while( first_file != NULL || FindNextFile(dirp, &file) )
+		{
+			LPWIN32_FIND_DATA cur_file = first_file ? first_file : &file;
+			if ( count >= nstats )
+			{
+				nstats *= 2;
+				stats = xrealloc(stats, nstats, sizeof(Stat));
+			}
+			
+			char *utf8_name = lpwstr_to_utf8(cur_file->cFileName);
+			snprintf(pathname, sizeof pathname, "%s%s%s", path,
+				strcmp(path, "/") ? "/" : "", utf8_name);
+			
+			find_data_to_attrib(cur_file, &(stats[count].attrib));
+			stats[count].name = utf8_name;
+			stats[count].long_name = win32_ls_file(utf8_name, cur_file, 0, 0);
+			count++;
+			
+			
+			if ( first_file )
+			{
+				/* First entry done with, free and clear */
+				free(first_file);
+				first_file = NULL;
+				handle_set_first_file(handle, NULL);
+			}
+			
+			if ( count == 100 )
+				break;
+		}
+		#endif
 		if (count > 0) {
 			send_names(id, count, stats);
 			for (i = 0; i < count; i++) {
+				logit("Name     : %s", stats[i].name);
+				logit("Long name: %s", stats[i].long_name);
+				
 				free(stats[i].name);
 				free(stats[i].long_name);
 			}
@@ -1773,6 +1985,9 @@ sftp_server_main(int argc, char **argv, struct passwd *user_pw)
 		client_addr = xstrdup("UNKNOWN");
 
 	logit("=== SFTP server started ===");
+	char *test = lpwstr_to_utf8(L"ABCD, АБВГД");
+	logit("LPWSTR to UTF8 test: %s", test);
+	free(test);
 	
 	for(i=0;i<argc;i++) {
 		logit("Argument %i: %s", i, argv[i]);
@@ -2001,33 +2216,6 @@ LPTSTR find_tchar_argument(LPCTSTR option) {
 	
 	LocalFree(argv);
 	return ret;
-}
-
-LPWSTR utf8_to_lpwstr(char *string) {
-	if ( string == NULL )
-		return NULL;
-	
-	if ( string[0] == '\0' )
-		return L"";
-	
-	int utf8_size = MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, string, -1, NULL, 0);
-	
-	if ( utf8_size <= 0 ) {
-		fatal("Error getting allocation size for string conversion");
-		return NULL;
-	}
-	
-	int buflen = utf8_size * sizeof(WCHAR);
-	LPWSTR utf8_string = malloc(buflen);
-	
-	int ret = MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, string, -1, utf8_string, buflen);
-	
-	if ( ret <= 0 ) {
-		fatal("Error performing UTF8 to UTF16 conversion");
-		return NULL;
-	}
-	
-	return utf8_string;
 }
 
 #endif

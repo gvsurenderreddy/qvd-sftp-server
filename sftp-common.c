@@ -53,6 +53,7 @@
 
 #ifdef __WIN32__
 #include "openbsd-compat/qvd_pw.h"
+#include <Windows.h>
 #endif
 
 /* Clear contents of attributes structure */
@@ -86,6 +87,33 @@ stat_to_attrib(const struct stat *st, Attrib *a)
 	a->mtime = st->st_mtime;
 }
 
+#ifdef __WIN32__
+static time_t filetime_to_time_t(FILETIME time)
+{
+	ULARGE_INTEGER tmp;
+	tmp.LowPart  = time.dwLowDateTime;
+	tmp.HighPart = time.dwHighDateTime;
+	return tmp.QuadPart / 10000000ULL - 11644473600ULL;
+}
+
+void
+find_data_to_attrib(LPWIN32_FIND_DATA file, Attrib *a)
+{
+	attrib_clear(a);
+	a->flags = 0;
+	a->flags |= SSH2_FILEXFER_ATTR_SIZE;
+	a->size = (file->nFileSizeHigh * (MAXDWORD+1)) + file->nFileSizeLow;
+	a->flags |= SSH2_FILEXFER_ATTR_UIDGID;
+	a->uid = 0;
+	a->gid = 0;
+	a->flags |= SSH2_FILEXFER_ATTR_PERMISSIONS;
+	a->perm = 0644;
+	a->flags |= SSH2_FILEXFER_ATTR_ACMODTIME;
+	a->atime = filetime_to_time_t( file->ftLastAccessTime );
+	a->mtime = filetime_to_time_t( file->ftLastWriteTime );
+}
+
+#endif
 /* Convert from filexfer attribs to struct stat */
 void
 attrib_to_stat(const Attrib *a, struct stat *st)
@@ -226,6 +254,7 @@ ls_file(const char *name, const struct stat *st, int remote, int si_units)
 	char sbuf[FMT_SCALED_STRSIZE];
 	time_t now;
 
+
 	strmode(st->st_mode, mode);
 	if (!remote) {
 		user = user_from_uid(st->st_uid, 0);
@@ -263,3 +292,93 @@ ls_file(const char *name, const struct stat *st, int remote, int si_units)
 	}
 	return xstrdup(buf);
 }
+
+
+#ifdef __WIN32__
+
+ULONGLONG time_diff(SYSTEMTIME t1, SYSTEMTIME t2) {
+	FILETIME f1, f2;
+	ULARGE_INTEGER u1, u2;
+	
+	if ( SystemTimeToFileTime(&t1, &f1) &&
+	     SystemTimeToFileTime(&t2, &f2) ) {
+			
+		u1.LowPart  = f1.dwLowDateTime;
+		u1.HighPart = f1.dwHighDateTime;
+		u2.LowPart  = f2.dwLowDateTime;
+		u2.HighPart = f2.dwHighDateTime;
+		
+		return u2.QuadPart - u1.QuadPart;
+	}
+	
+	// Shoudln't really matter
+	return 0;
+}
+
+char *
+win32_ls_file(const char *name, LPWIN32_FIND_DATA file, int remote, int si_units)
+{
+	int ulen, glen, sz = 0;
+	//struct tm *ltime = localtime(&st->st_mtime);
+	char *user, *group;
+	char buf[1024], mode[11+1], tbuf[12+1], ubuf[11+1], gbuf[11+1];
+	char sbuf[FMT_SCALED_STRSIZE];
+	SYSTEMTIME now;
+	SYSTEMTIME ftime;
+	
+	time_t mtime = filetime_to_time_t( file->ftLastWriteTime );
+	BOOL time_conv_ok = FileTimeToSystemTime( &file->ftLastWriteTime, &ftime);
+	struct tm *ltime = localtime( &mtime );
+	
+    if (!time_conv_ok) {
+		error("Failed to convert file time to localtime");
+	}
+	
+	strmode(0644, mode);
+	if (!remote) {
+		user = user_from_uid(0, 0);
+	} else {
+		snprintf(ubuf, sizeof ubuf, "%u", 0);
+		user = ubuf;
+	}
+	
+	if (!remote) {
+		group = group_from_gid(0, 0);
+	} else {
+		snprintf(gbuf, sizeof gbuf, "%u", 0);
+		group = gbuf;
+	}
+	
+	if (time_conv_ok) {
+		//now = time(NULL);
+		GetSystemTime(&now);
+		
+		if ( (time_diff(now, ftime) / 10000000ULL) < (365*24*60*60) ) {
+		//if (now - (365*24*60*60)/2 < st->st_mtime &&
+		  //  now >= st->st_mtime)
+			sz = strftime(tbuf, sizeof tbuf, "%b %e %H:%M", ltime);
+		} else {
+			sz = strftime(tbuf, sizeof tbuf, "%b %e  %Y", ltime);
+		}
+	}
+	if (sz == 0)
+		tbuf[0] = '\0';
+	ulen = MAX(strlen(user), 8);
+	glen = MAX(strlen(group), 8);
+	long long size = (file->nFileSizeHigh * (MAXDWORD+1)) + file->nFileSizeLow;
+		
+	if (si_units) {
+		fmt_scaled(size, sbuf);
+		snprintf(buf, sizeof buf, "%s %3u %-*s %-*s %8s %s %s", mode,
+		    1 /*nlink -- FIXME */, ulen, user, glen, group,
+		    sbuf, tbuf, name);
+	} else {
+		snprintf(buf, sizeof buf, "%s %3u %-*s %-*s %8llu %s %s", mode,
+		    1 /*nlink -- FIXME */, ulen, user, glen, group,
+		    size, tbuf, name);
+	}
+	return xstrdup(buf);
+}
+
+#endif
+

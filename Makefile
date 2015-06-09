@@ -23,14 +23,15 @@ SOURCES=bufaux.c \
 	sftp-common.c \
 	sftp-server.c \
 	sftp-server-main.c \
-	xmalloc.c
+	xmalloc.c \
+	winfunc.c 
 
 .PHONY: deploy
 deploy: sftp-server.exe
 	cp -p -v sftp-server.exe /v
 	
 sftp-server.exe: $(SOURCES:.c=.o)
-	$(CC) --verbose  -o $@ $+ -lmsvcrt -lws2_32
+	$(CC) --verbose  -o $@ $+ -lmsvcrt -lshlwapi -lws2_32
 	#strip $@
 	
 -include $(SOURCES:.c=.d)
