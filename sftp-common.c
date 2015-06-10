@@ -26,6 +26,8 @@
 
 /* #include "includes.h" */
 #include "includes-joni.h"
+#include "openbsd-compat/openbsd-compat.h"
+
 
 #include <sys/param.h>	/* MAX */
 #include <sys/types.h>
@@ -41,7 +43,7 @@
 #include <stdarg.h>
 #ifdef HAVE_UTIL_H
 #include <util.h>
-#endif
+#endif	
 
 #include "xmalloc.h"
 #include "ssherr.h"
@@ -54,6 +56,9 @@
 #ifdef __WIN32__
 #include "openbsd-compat/qvd_pw.h"
 #include <Windows.h>
+#include <winnt.h>
+#include <basetyps.h>
+#include <Shellapi.h>
 #endif
 
 /* Clear contents of attributes structure */
@@ -108,10 +113,50 @@ find_data_to_attrib(LPWIN32_FIND_DATA file, Attrib *a)
 	a->gid = 0;
 	a->flags |= SSH2_FILEXFER_ATTR_PERMISSIONS;
 	a->perm = 0644;
+	
+	if ( file->dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ) {
+		a->perm = 0755;
+		a->perm ^= S_IFDIR;
+	} else {
+		a->perm ^= S_IFREG;
+	}
+	
+	if ( file->dwFileAttributes & FILE_ATTRIBUTE_READONLY )
+		a->perm &= ~0222;
+	
 	a->flags |= SSH2_FILEXFER_ATTR_ACMODTIME;
 	a->atime = filetime_to_time_t( file->ftLastAccessTime );
 	a->mtime = filetime_to_time_t( file->ftLastWriteTime );
 }
+
+void file_info_to_attrib(LPBY_HANDLE_FILE_INFORMATION file_info, FILE_ID_INFO *fileid_info, Attrib *a)
+{
+	attrib_clear(a);
+	a->flags = 0;
+	a->flags |= SSH2_FILEXFER_ATTR_SIZE;
+	a->size = (file_info->nFileSizeHigh * (MAXDWORD+1)) + file_info->nFileSizeLow;
+	a->flags |= SSH2_FILEXFER_ATTR_UIDGID;
+	a->uid = 0;
+	a->gid = 0;
+	a->flags |= SSH2_FILEXFER_ATTR_PERMISSIONS;
+	a->perm = 0644;
+	
+	if ( file_info->dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ) {
+		a->perm = 0755;
+		a->perm ^= S_IFDIR;
+	} else {
+		a->perm ^= S_IFREG;
+	}
+	
+	if ( file_info->dwFileAttributes & FILE_ATTRIBUTE_READONLY )
+		a->perm &= ~0222;
+	
+	a->flags |= SSH2_FILEXFER_ATTR_ACMODTIME;
+	a->atime = filetime_to_time_t( file_info->ftLastAccessTime );
+	a->mtime = filetime_to_time_t( file_info->ftLastWriteTime );
+	
+}
+
 
 #endif
 /* Convert from filexfer attribs to struct stat */

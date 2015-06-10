@@ -24,6 +24,12 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include "qvd_includes.h"
+
+#include <windows.h>
+#include <winnt.h>
+#include <basetyps.h>
+#include <Shellapi.h>
 
 /* Maximum packet that we are willing to send/accept */
 #define SFTP_MAX_MSG_LENGTH	(256 * 1024)
@@ -52,6 +58,8 @@ char	*ls_file(const char *, const struct stat *, int, int);
 #ifdef __WIN32__
 #include <Windows.h>
 char *win32_ls_file(const char *name, LPWIN32_FIND_DATA file, int remote, int si_units);
+void find_data_to_attrib(LPWIN32_FIND_DATA file, Attrib *a);
+void file_info_to_attrib(LPBY_HANDLE_FILE_INFORMATION file_info, FILE_ID_INFO *fileid_info, Attrib *a);
 #endif
 
 const char *fx2txt(int);

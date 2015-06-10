@@ -72,10 +72,8 @@
 
 #ifdef __WIN32__
 #include "openbsd-compat/bsd-misc.h"
+#include "openbsd-compat/openbsd-compat.h"
 #include "winfunc.h"
-
-
-
 #endif
 
 /* Our verbosity */
@@ -253,6 +251,46 @@ errno_to_portable(int unixerrno)
 	}
 	return ret;
 }
+
+#ifdef __WIN32__
+static int
+win32_err_to_portable(DWORD winerror)
+{
+	int ret = 0;
+
+	switch (winerror) {
+	case ERROR_SUCCESS:
+		ret = SSH2_FX_OK;
+		break;
+	case ERROR_FILE_NOT_FOUND:
+	case ERROR_PATH_NOT_FOUND:
+	case ERROR_INVALID_HANDLE: /* EBADF */
+	case ERROR_DEV_NOT_EXIST:
+#ifndef __WIN32__
+//	case ELOOP: // symlink loop
+#endif
+		ret = SSH2_FX_NO_SUCH_FILE;
+		break;
+    case ERROR_ACCESS_DENIED:
+    case ERROR_SHARING_VIOLATION:
+    case ERROR_ALREADY_EXISTS:
+		ret = SSH2_FX_PERMISSION_DENIED;
+		break;
+	case ERROR_BUFFER_OVERFLOW:
+	case ERROR_INVALID_NAME:
+	case ERROR_FILENAME_EXCED_RANGE:
+		ret = SSH2_FX_BAD_MESSAGE;
+		break;
+	case ERROR_CALL_NOT_IMPLEMENTED:
+		ret = SSH2_FX_OP_UNSUPPORTED;
+		break;
+	default:
+		ret = SSH2_FX_FAILURE;
+		break;
+	}
+	return ret;
+}
+#endif
 
 static int
 flags_from_portable(int pflags)
@@ -1036,11 +1074,11 @@ process_do_stat(u_int32_t id, int do_lstat)
 	BOOL fi_ret, fi_ex_ret;
 
 	HANDLE hFile = CreateFile(filename, 
-			GENERIC_READ, 
+			0, /* GENERIC_READ */ 
 			FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, 
 			NULL, /* security attributes */
 			OPEN_EXISTING,
-			FILE_ATTRIBUTE_NORMAL, 
+			FILE_FLAG_BACKUP_SEMANTICS, 
 			NULL /* template file */
 	);  
 	
@@ -1051,19 +1089,30 @@ process_do_stat(u_int32_t id, int do_lstat)
 			windows_error(L"GetFileInformationByHandle");
 		}
 		
-		if ( !(fi_ex_ret = GetFileInformationByHandleEx(hFile, FIBHC_FILE_ID_INFO, &fileid_info, sizeof(fileid_info))) ) {
-			status = SSH2_FX_FAILURE;
-			windows_error(L"GetFileInformationByHandleEx");
-		}
+//		if ( !(fi_ex_ret = GetFileInformationByHandleEx(hFile, FIBHC_FILE_ID_INFO, &fileid_info, sizeof(fileid_info))) ) {
+//			status = SSH2_FX_FAILURE;
+//			windows_error(L"GetFileInformationByHandleEx");
+//		}
 	
-		if ( fi_ret && fi_ex_ret ) {
-			
+		if ( fi_ret ) { // && fi_ex_ret ) {
+			file_info_to_attrib(&file_info, &fileid_info, &a);
+			send_attrib(id, &a);
+			status = SSH2_FX_OK;
 		}
 
 		CloseHandle(hFile);
 	} else {
-		status = SSH2_FX_FAILURE;
-		windows_error(L"CreateFile");
+		switch( GetLastError() ) {
+			case ERROR_FILE_NOT_FOUND:
+				status = errno_to_portable(ENOENT);
+				break;
+			case ERROR_ACCESS_DENIED:
+				status = errno_to_portable(EPERM);
+				break;
+			default:
+				status = SSH2_FX_FAILURE;
+				windows_error(L"CreateFile");	
+		}
 	}
 	
 	free(filename);
@@ -1631,8 +1680,25 @@ process_extended_posix_rename(u_int32_t id)
 
 	debug3("request %u: posix-rename", id);
 	logit("posix-rename old \"%s\" new \"%s\"", oldpath, newpath);
+#ifndef __WIN32__
 	r = rename(oldpath, newpath);
 	status = (r == -1) ? errno_to_portable(errno) : SSH2_FX_OK;
+#else
+	LPWSTR lpwstrOld = utf8_to_lpwstr(oldpath);
+	LPWSTR lpwstrNew = utf8_to_lpwstr(newpath);
+	DWORD error;
+	
+	if ( MoveFile(lpwstrOld, lpwstrNew) == 0 ) {
+		DWORD error = GetLastError();
+		windows_error2(L"MoveFile", error);
+		status = win32_err_to_portable(error);
+	} else {
+		status = SSH2_FX_OK;
+	}
+	
+	free(lpwstrNew);
+	free(lpwstrOld);
+#endif
 	send_status(id, status);
 	free(oldpath);
 	free(newpath);
@@ -1652,7 +1718,7 @@ process_extended_statvfs(u_int32_t id)
 	logit("statvfs \"%s\"", path);
 
 	if (statvfs(path, &st) != 0)
-		send_status(id, errno_to_portable(errno));
+		send_status(id, 3(errno));
 	else
 		send_statvfs(id, &st);
         free(path);
@@ -2030,7 +2096,7 @@ sftp_server_main(int argc, char **argv, struct passwd *user_pw)
         DWORD BytesRead;
         int err;
 
-        if (err = WSAStartup(0x0202, &WSAData)) {
+        if ((err = WSAStartup(0x0202, &WSAData))) {
             fatal("WSAStartup: %p", err);
         }
         
@@ -2164,7 +2230,7 @@ sftp_server_main(int argc, char **argv, struct passwd *user_pw)
 		}
 		/* send oqueue to stdout */
 		if (FD_ISSET(out, wset)) {
-			len = send(out, sshbuf_ptr(oqueue), olen, 0);
+			len = send(out, (const char*)sshbuf_ptr(oqueue), olen, 0);
 			if (len < 0) {
 				error("write: %s", strerror(errno));
 				sftp_server_cleanup_exit(1);
