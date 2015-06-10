@@ -34,7 +34,7 @@
 #ifndef _BLF_H_
 #define _BLF_H_
 
-#include "includes.h"
+#include "../qvd_includes.h"
 
 #if !defined(HAVE_BCRYPT_PBKDF) && !defined(HAVE_BLH_H)
 

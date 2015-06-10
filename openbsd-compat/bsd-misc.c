@@ -135,6 +135,7 @@ int truncate(const char *path, off_t length)
 	return(ret);
 #else
 	/* QVD: TODO */
+	return 0;
 #endif
 }
 #endif /* HAVE_TRUNCATE */

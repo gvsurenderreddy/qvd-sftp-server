@@ -39,6 +39,7 @@
  */
 
 #include "../qvd_includes.h"
+#include "openbsd-compat.h"
 
 #ifndef HAVE_FMT_SCALED
 

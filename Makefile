@@ -1,6 +1,9 @@
 #CC=i686-w64-mingw32-gcc
+DISABLE_WARNINGS=-Wno-format
+DISABLE_ERRORS=-Wno-error=unused-function -Wno-error=unused-variable
+
 CC=gcc
-CFLAGS=-O0 -ggdb -Werror
+CFLAGS=-O0 -ggdb -Wall $(DISABLE_WARNINGS) -Werror $(DISABLE_ERRORS) -std=gnu99
 
 SOURCES=bufaux.c \
 	buffer.c \
@@ -20,6 +23,7 @@ SOURCES=bufaux.c \
 	openbsd-compat/strtonum.c \
 	openbsd-compat/qvd_pw.c \
 	openbsd-compat/strsep.c \
+	openbsd-compat/bsd-snprintf.c \
 	sftp-common.c \
 	sftp-server.c \
 	sftp-server-main.c \

@@ -63,9 +63,21 @@ struct statvfs {
 #define HAVE_TCGETPGRP /* Filthy lies, but we don't need it */
 #define HAVE_GETPGID /* Same */
 #define HAVE_UTIMES /* Same */
+#define HAVE_BINDRESVPORT_SA /* Same */
+#define HAVE_RRESVPORT_AF /* Same */
+#define HAVE_INET_NTOA /* Same */
+#define HAVE_INET_ATON /* Same */
+
 #define HAVE_USLEEP /* We do have this */
 #define HAVE_STRUCT_TIMESPEC
 #define HAVE_NANOSLEEP
+#define HAVE_REALPATH
+#undef  BROKEN_REALPATH
+#define HAVE_GETCWD
+//#define HAVE_SNPRINTF
+#define SNPRINTF_CONST const
+
+#define HAVE_MBLEN
 
 
 #ifdef __WIN32__
@@ -84,6 +96,9 @@ struct statvfs {
 
 
 #include "defines.h"
+#undef BROKEN_REALPATH
+#undef HAVE_STRMODE
+
 
 #ifdef __WIN32__
 typedef unsigned short u_short;

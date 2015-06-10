@@ -25,6 +25,7 @@
  */
 
 #include "qvd_includes.h"
+#include "openbsd-compat/openbsd-compat.h"
 
 #include <sys/types.h>
 #ifndef __WIN32__

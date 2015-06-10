@@ -45,7 +45,7 @@
 #ifndef _BSD_BASE64_H
 #define _BSD_BASE64_H
 
-#include "includes.h"
+#include "../qvd_includes.h"
 
 #ifndef HAVE___B64_NTOP
 # ifndef HAVE_B64_NTOP

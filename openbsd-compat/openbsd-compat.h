@@ -29,11 +29,13 @@
 #ifndef _OPENBSD_COMPAT_H
 #define _OPENBSD_COMPAT_H
 
-#include "includes.h"
+#include "../qvd_includes.h"
 
 #include <sys/types.h>
-#include <pwd.h>
 
+#ifndef __WIN32__
+#include <pwd.h>
+#endif
 #include <sys/socket.h>
 
 /* OpenBSD function replacements */
@@ -42,7 +44,11 @@
 #include "glob.h"
 #include "readpassphrase.h"
 #include "vis.h"
+
+#ifndef __WIN32__
 #include "getrrsetbyname.h"
+#endif
+
 #include "sha1.h"
 #include "sha2.h"
 #include "rmd160.h"
@@ -151,7 +157,7 @@ int getgrouplist(const char *, gid_t, gid_t *, int *);
 
 #if !defined(HAVE_GETOPT) || !defined(HAVE_GETOPT_OPTRESET)
 int BSDgetopt(int argc, char * const *argv, const char *opts);
-#include "openbsd-compat/getopt.h"
+#include "getopt.h"
 #endif
 
 #if defined(HAVE_DECL_WRITEV) && HAVE_DECL_WRITEV == 0
@@ -162,10 +168,13 @@ int writev(int, struct iovec *, int);
 
 /* Home grown routines */
 #include "bsd-misc.h"
+
+#ifndef __WIN32__
 #include "bsd-setres_id.h"
 #include "bsd-statvfs.h"
 #include "bsd-waitpid.h"
 #include "bsd-poll.h"
+#endif
 
 #ifndef HAVE_GETPEEREID
 int getpeereid(int , uid_t *, gid_t *);
@@ -193,8 +202,10 @@ int asprintf(char **, const char *, ...);
 #endif 
 
 #ifndef HAVE_OPENPTY
+#ifndef __WIN32__
 # include <sys/ioctl.h>	/* for struct winsize */
 int openpty(int *, int *, char *, struct termios *, struct winsize *);
+#endif
 #endif /* HAVE_OPENPTY */
 
 /* #include <sys/types.h> XXX needed? For size_t */
@@ -221,7 +232,7 @@ long long strtonum(const char *, long long, long long, const char **);
 
 /* multibyte character support */
 #ifndef HAVE_MBLEN
-# define mblen(x, y)	1
+# define mblen(x,y)	(1)
 #endif
 
 #if !defined(HAVE_VASPRINTF) || !defined(HAVE_VSNPRINTF)
@@ -261,19 +272,23 @@ void *xmmap(size_t size);
 char *xcrypt(const char *password, const char *salt);
 char *shadow_pw(struct passwd *pw);
 
+#ifndef __WIN32__
 /* rfc2553 socket API replacements */
 #include "fake-rfc2553.h"
+#endif
 
 /* Routines for a single OS platform */
 #include "bsd-cray.h"
 #include "bsd-cygwin_util.h"
 
+#ifndef __WIN32__
 #include "port-aix.h"
 #include "port-irix.h"
 #include "port-linux.h"
 #include "port-solaris.h"
 #include "port-tun.h"
 #include "port-uw.h"
+#endif
 
 /* _FORTIFY_SOURCE breaks FD_ISSET(n)/FD_SET(n) for n > FD_SETSIZE. Avoid. */
 #if defined(HAVE_FEATURES_H) && defined(_FORTIFY_SOURCE)

@@ -6,19 +6,18 @@
 #include "log.h"
 #include "winfunc.h"
 
-void windows_error_int(LPWSTR lpszFunction, char *filename, int line, BOOL abort) {
+void windows_error_int5(LPWSTR lpszFunction, DWORD err, char *filename, int line, BOOL abort) {
 	// Retrieve the system error message for the last-error code
 
     LPWSTR lpMsgBuf;
     LPWSTR lpDisplayBuf;
-    DWORD dw = GetLastError(); 
 
     FormatMessage(
         FORMAT_MESSAGE_ALLOCATE_BUFFER | 
         FORMAT_MESSAGE_FROM_SYSTEM |
         FORMAT_MESSAGE_IGNORE_INSERTS,
         NULL,
-        dw,
+        err,
         MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
         (LPWSTR)&lpMsgBuf,
         0, NULL );
@@ -33,14 +32,14 @@ void windows_error_int(LPWSTR lpszFunction, char *filename, int line, BOOL abort
 	char *msg = lpwstr_to_utf8(lpMsgBuf);
 	char *func = lpwstr_to_utf8(lpszFunction);
 	
-	logit("WinAPI call %s failed at file %s:%d with error %d: %s",  func, filename, line, dw, msg);
+	logit("WinAPI call %s failed at file %s:%d with error %d: %s",  func, filename, line, err, msg);
 	free(msg);
 	free(func);
 	
    // HRESULT ret = StringCchPrintfW(lpDisplayBuf, 
    //     buflen / sizeof(WCHAR),
    //     L"WinAPI call %s failed at file %s, line %d with error %d: %s", 
-    //    lpszFunction, file, line, dw, lpMsgBuf); 
+    //    lpszFunction, file, line, err, lpMsgBuf); 
 	
 	//free(errmsg);
 	
@@ -73,6 +72,11 @@ void windows_error_int(LPWSTR lpszFunction, char *filename, int line, BOOL abort
     LocalFree(lpMsgBuf);
     LocalFree(lpDisplayBuf);
 	
+}
+
+void windows_error_int(LPWSTR lpszFunction, char *filename, int line, BOOL abort) {
+	DWORD err = GetLastError();
+	windows_error_int5(lpszFunction, err, filename, line, abort);
 }
 
 LPWSTR utf8_to_lpwstr(char *string) {

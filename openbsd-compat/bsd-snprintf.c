@@ -92,7 +92,7 @@
  *
  **************************************************************/
 
-#include "includes.h"
+#include "../qvd_includes.h"
 
 #if defined(BROKEN_SNPRINTF)		/* For those with broken snprintf() */
 # undef HAVE_SNPRINTF

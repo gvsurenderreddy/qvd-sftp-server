@@ -48,7 +48,7 @@
 #ifndef _GETRRSETBYNAME_H
 #define _GETRRSETBYNAME_H
 
-#include "includes.h"
+#include "../qvd_includes.h"
 
 #ifndef HAVE_GETRRSETBYNAME
 

@@ -25,7 +25,7 @@
 #ifndef _READPASSPHRASE_H_
 #define _READPASSPHRASE_H_
 
-#include "includes.h"
+#include "../qvd_includes.h"
 
 #ifndef HAVE_READPASSPHRASE
 

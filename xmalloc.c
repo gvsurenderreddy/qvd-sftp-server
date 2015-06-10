@@ -14,6 +14,7 @@
  */
 
 #include "qvd_includes.h"
+#include "openbsd-compat/openbsd-compat.h"
 
 #include <stdarg.h>
 #ifdef HAVE_STDINT_H
